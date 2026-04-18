@@ -1,0 +1,6 @@
+@PharmPOS.API_HostAddress = http://localhost:5186
+
+GET {{PharmPOS.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
