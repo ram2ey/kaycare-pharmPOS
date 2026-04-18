@@ -11,7 +11,7 @@
 ## Step 1 — Create Resource Group
 
 In Azure Portal → Resource groups → Create:
-- **Name:** `kaycare-pharmpOS-rg`
+- **Name:** `kaycare-pharmpos-rg`
 - **Region:** South Africa North (or your preferred region)
 
 ---
@@ -23,7 +23,7 @@ In Azure Portal → Resource groups → Create:
 3. Paste the contents of `infrastructure/bicep/main-consolidated.bicep`
 4. Click **Save**
 5. Fill in:
-   - **Resource group:** `kaycare-pharmpOS-rg`
+   - **Resource group:** `kaycare-pharmpos-rg`
    - **Sql Admin Password:** a strong password (save it — you'll need it for migrations)
    - **Jwt Key:** a long random string (e.g. 64 random characters)
    - Leave other params as defaults
@@ -34,13 +34,13 @@ Wait ~3 minutes for all resources to deploy.
 **Deployed resources:**
 | Resource | Name |
 |---|---|
-| App Service Plan | `pharmpOS-prod-plan` |
-| App Service (API) | `pharmpOS-prod-api` |
-| SQL Server | `pharmpOS-prod-sql` |
+| App Service Plan | `pharmpos-prod-plan` |
+| App Service (API) | `pharmpos-prod-api` |
+| SQL Server | `pharmpos-prod-sql` |
 | SQL Database | `PharmPOSDb` |
-| Blob Storage | `pharmpOSprodStor` |
-| Key Vault | `pharmpOS-prod-kv` |
-| Static Web App | `pharmpOS-prod-web` |
+| Blob Storage | `pharmposprodstor` |
+| Key Vault | `pharmpos-prod-kv` |
+| Static Web App | `pharmpos-prod-web` |
 
 ---
 
@@ -48,10 +48,10 @@ Wait ~3 minutes for all resources to deploy.
 
 Key Vault references sometimes don't resolve on first deploy. Set the connection string directly:
 
-1. Go to `pharmpOS-prod-api` App Service → **Environment variables** → **Connection strings**
+1. Go to `pharmpos-prod-api` App Service → **Environment variables** → **Connection strings**
 2. Add:
    - **Name:** `DefaultConnection`
-   - **Value:** `Server=tcp:pharmpOS-prod-sql.database.windows.net,1433;Initial Catalog=PharmPOSDb;User ID=pharmpOS_admin;Password=YOUR_PASSWORD;Encrypt=True;Connection Timeout=30;`
+   - **Value:** `Server=tcp:pharmpos-prod-sql.database.windows.net,1433;Initial Catalog=PharmPOSDb;User ID=pharmpos_admin;Password=YOUR_PASSWORD;Encrypt=True;Connection Timeout=30;`
    - **Type:** `SQLAzure`
 3. Click **Apply → Save**
 
@@ -59,7 +59,7 @@ Key Vault references sometimes don't resolve on first deploy. Set the connection
 
 ## Step 4 — Allow Your IP to Access SQL
 
-1. Go to `pharmpOS-prod-sql` SQL Server → **Networking**
+1. Go to `pharmpos-prod-sql` SQL Server → **Networking**
 2. Under Firewall rules → **Add your client IP**
 3. Click **Save**
 
@@ -71,7 +71,7 @@ Run from the repo root on your local machine:
 
 ```bash
 # Set the Azure connection string as an env var
-$env:ConnectionStrings__DefaultConnection = "Server=tcp:pharmpOS-prod-sql.database.windows.net,1433;Initial Catalog=PharmPOSDb;User ID=pharmpOS_admin;Password=YOUR_PASSWORD;Encrypt=True;Connection Timeout=30;TrustServerCertificate=False;"
+$env:ConnectionStrings__DefaultConnection = "Server=tcp:pharmpos-prod-sql.database.windows.net,1433;Initial Catalog=PharmPOSDb;User ID=pharmpos_admin;Password=YOUR_PASSWORD;Encrypt=True;Connection Timeout=30;TrustServerCertificate=False;"
 
 dotnet ef database update --project src/PharmPOS.Infrastructure --startup-project src/PharmPOS.API
 ```
@@ -95,12 +95,12 @@ This creates:
 ## Step 7 — Connect GitHub Actions (CI/CD)
 
 ### Backend (App Service)
-1. Go to `pharmpOS-prod-api` App Service → **Get publish profile** (download)
+1. Go to `pharmpos-prod-api` App Service → **Get publish profile** (download)
 2. Go to GitHub → `kaycare-pharmPOS` repo → **Settings → Secrets → Actions**
 3. Add secret: `AZURE_WEBAPP_PUBLISH_PROFILE` → paste the XML content
 
 ### Frontend (Static Web App)
-1. Go to `pharmpOS-prod-web` Static Web App → **Manage deployment token** → copy
+1. Go to `pharmpos-prod-web` Static Web App → **Manage deployment token** → copy
 2. Add GitHub secret: `AZURE_STATIC_WEB_APPS_API_TOKEN` → paste the token
 
 ### Trigger first deploy
@@ -112,7 +112,7 @@ Push any change to `main`, or go to **Actions** → run the workflow manually.
 
 In `frontend/.env.production`, set:
 ```
-VITE_API_URL=https://pharmpOS-prod-api.azurewebsites.net/api
+VITE_API_URL=https://pharmpos-prod-api.azurewebsites.net/api
 ```
 
 Commit and push — the frontend workflow will rebuild and redeploy.
@@ -121,5 +121,5 @@ Commit and push — the frontend workflow will rebuild and redeploy.
 
 ## Done
 
-- **API:** https://pharmpOS-prod-api.azurewebsites.net/swagger
+- **API:** https://pharmpos-prod-api.azurewebsites.net/swagger
 - **Frontend:** shown in Static Web App overview page

@@ -12,7 +12,7 @@ targetScope = 'resourceGroup'
 param environment string = 'prod'
 
 @description('Base name used for all resources (lowercase, no spaces)')
-param appName string = 'pharmpOS'
+param appName string = 'pharmpos'
 
 @description('Azure region for all resources')
 param location string = 'southafricanorth'
@@ -66,7 +66,7 @@ resource secretJwtKey 'Microsoft.KeyVault/vaults/secrets@2023-02-01' = {
   properties: { value: jwtKey }
 }
 
-var connString = 'Server=tcp:${sqlServerName}.database.windows.net,1433;Initial Catalog=${sqlDbName};Persist Security Info=False;User ID=${sqlAdminLogin};Password=${sqlAdminPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
+var connString = 'Server=tcp:${sqlServerName}${az.environment().suffixes.sqlServerHostname},1433;Initial Catalog=${sqlDbName};Persist Security Info=False;User ID=${sqlAdminLogin};Password=${sqlAdminPassword};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;'
 
 resource secretConnString 'Microsoft.KeyVault/vaults/secrets@2023-02-01' = {
   parent: kv
@@ -264,4 +264,5 @@ output apiUrl               string = 'https://${apiApp.properties.defaultHostNam
 output staticWebUrl         string = 'https://${staticWeb.properties.defaultHostname}'
 output keyVaultName         string = kvName
 output sqlServerFqdn        string = sqlServer.properties.fullyQualifiedDomainName
+@secure()
 output staticWebDeployToken string = staticWeb.listSecrets().properties.apiKey
