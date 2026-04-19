@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import { getReorderAlerts } from '../api/drugs';
@@ -6,7 +6,7 @@ import { getReorderAlerts } from '../api/drugs';
 interface NavItem {
   to: string;
   label: string;
-  icon: string;
+  adminOnly?: boolean;
   badge?: number;
 }
 
@@ -28,97 +28,70 @@ export default function Layout() {
 
   const isAdmin = user?.role === 'Admin' || user?.role === 'SuperAdmin';
 
-  const NAV: NavItem[] = [
-    { to: '/pos',             label: 'Point of Sale',    icon: '🛒' },
-    { to: '/sales',           label: 'Sales History',    icon: '🧾' },
-    { to: '/dashboard',       label: 'Dashboard',        icon: '📊' },
-    { to: '/customers',       label: 'Customers',        icon: '👥' },
-    { to: '/inventory',       label: 'Drug Inventory',   icon: '💊' },
-    { to: '/reorder-alerts',  label: 'Reorder Alerts',   icon: '⚠️', badge: lowStockCount || undefined },
-    { to: '/suppliers',       label: 'Suppliers',        icon: '🏭' },
-    { to: '/purchase-orders', label: 'Purchase Orders',  icon: '📦' },
-    { to: '/cs-register',     label: 'CS Register',      icon: '🔒' },
+  const navItems: NavItem[] = [
+    { to: '/pos',             label: 'Point of Sale' },
+    { to: '/sales',           label: 'Sales History' },
+    { to: '/dashboard',       label: 'Dashboard' },
+    { to: '/customers',       label: 'Customers' },
+    { to: '/inventory',       label: 'Drug Inventory' },
+    { to: '/reorder-alerts',  label: 'Reorder Alerts', badge: lowStockCount || undefined },
+    { to: '/suppliers',       label: 'Suppliers',       adminOnly: true },
+    { to: '/purchase-orders', label: 'Purchase Orders', adminOnly: true },
+    { to: '/cs-register',     label: 'CS Register' },
+    { to: '/settings',        label: 'Facility Settings', adminOnly: true },
+    { to: '/users',           label: 'Staff Users',       adminOnly: true },
   ];
 
-  const ADMIN_NAV: NavItem[] = [
-    { to: '/settings', label: 'Facility Settings', icon: '⚙️' },
-    { to: '/users',    label: 'Staff Users',        icon: '👤' },
-  ];
+  const visibleNav = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="w-56 flex-shrink-0 flex flex-col" style={{ background: '#15803d' }}>
-        {/* Logo */}
-        <div className="px-5 py-5 border-b border-green-600">
-          <div className="text-white font-bold text-lg leading-tight">KayCare PharmPOS</div>
-          <div className="text-green-200 text-xs mt-0.5">Pharmacy Management</div>
+    <div className="flex h-screen bg-gray-100">
+      <aside className="w-64 bg-blue-900 text-white flex flex-col">
+        <div className="px-6 py-5 border-b border-blue-800">
+          <h1 className="text-xl font-bold tracking-wide">PharmOS</h1>
+          <p className="text-blue-300 text-sm mt-1">{user?.tenantCode}</p>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
-          {NAV.map((item) => (
+        <nav className="flex-1 overflow-y-auto py-4">
+          {visibleNav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                `flex items-center justify-between px-6 py-2.5 text-sm transition-colors ${
                   isActive
-                    ? 'bg-white text-green-800'
-                    : 'text-green-100 hover:bg-green-700 hover:text-white'
+                    ? 'bg-blue-700 text-white font-medium'
+                    : 'text-blue-200 hover:bg-blue-800 hover:text-white'
                 }`
               }
             >
-              <span className="text-base leading-none">{item.icon}</span>
-              <span className="flex-1">{item.label}</span>
+              <span>{item.label}</span>
               {item.badge && item.badge > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none">
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none">
                   {item.badge}
                 </span>
               )}
             </NavLink>
           ))}
-
-          {isAdmin && (
-            <>
-              <div className="pt-3 pb-1 px-3 text-green-300 text-xs font-semibold uppercase tracking-wider">
-                Admin
-              </div>
-              {ADMIN_NAV.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      isActive
-                        ? 'bg-white text-green-800'
-                        : 'text-green-100 hover:bg-green-700 hover:text-white'
-                    }`
-                  }
-                >
-                  <span className="text-base leading-none">{item.icon}</span>
-                  {item.label}
-                </NavLink>
-              ))}
-            </>
-          )}
         </nav>
 
-        {/* User footer */}
-        <div className="px-4 py-4 border-t border-green-600">
-          <div className="text-green-100 text-xs font-medium truncate">{user?.fullName}</div>
-          <div className="text-green-300 text-xs truncate">{user?.role}</div>
+        <div className="px-6 py-4 border-t border-blue-800">
+          <p className="text-sm text-blue-200 truncate">{user?.fullName}</p>
+          <p className="text-xs text-blue-400">{user?.role}</p>
+          <Link to="/change-password"
+            className="mt-2 block text-xs text-blue-300 hover:text-white transition-colors">
+            Change password
+          </Link>
           <button
             onClick={handleLogout}
-            className="mt-2 text-xs text-green-200 hover:text-white transition-colors"
+            className="mt-1 w-full text-left text-xs text-blue-300 hover:text-white transition-colors"
           >
-            Sign out →
+            Sign out
           </button>
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
     </div>
