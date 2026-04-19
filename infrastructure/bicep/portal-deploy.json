@@ -1,0 +1,221 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "environment": {
+      "type": "string",
+      "defaultValue": "prod",
+      "allowedValues": ["dev", "staging", "prod"]
+    },
+    "appName": {
+      "type": "string",
+      "defaultValue": "pharmpos",
+      "metadata": { "description": "Base name for all resources (lowercase, no spaces)" }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "southafricanorth"
+    },
+    "sqlAdminLogin": {
+      "type": "string",
+      "defaultValue": "pharmpos_admin"
+    },
+    "sqlAdminPassword": {
+      "type": "securestring"
+    },
+    "jwtKey": {
+      "type": "securestring"
+    }
+  },
+  "variables": {
+    "prefix": "[format('{0}-{1}', parameters('appName'), parameters('environment'))]",
+    "kvName": "[format('{0}-kv', variables('prefix'))]",
+    "sqlServerName": "[format('{0}-sql', variables('prefix'))]",
+    "sqlDbName": "PharmPOSDb",
+    "storageName": "[replace(format('{0}{1}stor', parameters('appName'), parameters('environment')), '-', '')]",
+    "appPlanName": "[format('{0}-plan', variables('prefix'))]",
+    "apiAppName": "[format('{0}-api', variables('prefix'))]",
+    "staticWebName": "[format('{0}-web', variables('prefix'))]",
+    "connString": "[format('Server=tcp:{0}.database.windows.net,1433;Initial Catalog={1};Persist Security Info=False;User ID={2};Password={3};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;', variables('sqlServerName'), variables('sqlDbName'), parameters('sqlAdminLogin'), parameters('sqlAdminPassword'))]",
+    "kvBaseUri": "[format('https://{0}.vault.azure.net/secrets', variables('kvName'))]",
+    "kvSecretsUserRoleId": "4633458b-17de-408a-b874-0445c86b69e6"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-02-01",
+      "name": "[variables('kvName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": { "family": "A", "name": "standard" },
+        "tenantId": "[tenant().tenantId]",
+        "enableRbacAuthorization": true,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 7
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-02-01",
+      "name": "[format('{0}/JwtKey', variables('kvName'))]",
+      "properties": { "value": "[parameters('jwtKey')]" },
+      "dependsOn": ["[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]"]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-02-01",
+      "name": "[format('{0}/DefaultConnection', variables('kvName'))]",
+      "properties": { "value": "[variables('connString')]" },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2023-02-01",
+      "name": "[format('{0}/BlobStorageConnection', variables('kvName'))]",
+      "properties": {
+        "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix=core.windows.net', variables('storageName'), listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageName')), '2023-01-01').keys[0].value)]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Sql/servers",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[variables('sqlServerName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "administratorLogin": "[parameters('sqlAdminLogin')]",
+        "administratorLoginPassword": "[parameters('sqlAdminPassword')]",
+        "minimalTlsVersion": "1.2",
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.Sql/servers/firewallRules",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[format('{0}/AllowAzureServices', variables('sqlServerName'))]",
+      "properties": { "startIpAddress": "0.0.0.0", "endIpAddress": "0.0.0.0" },
+      "dependsOn": ["[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"]
+    },
+    {
+      "type": "Microsoft.Sql/servers/databases",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[format('{0}/{1}', variables('sqlServerName'), variables('sqlDbName'))]",
+      "location": "[parameters('location')]",
+      "sku": { "name": "Basic", "tier": "Basic", "capacity": 5 },
+      "properties": {
+        "collation": "SQL_Latin1_General_CP1_CI_AS",
+        "maxSizeBytes": 2147483648
+      },
+      "dependsOn": ["[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]"]
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('storageName')]",
+      "location": "[parameters('location')]",
+      "sku": { "name": "Standard_LRS" },
+      "kind": "StorageV2",
+      "properties": {
+        "accessTier": "Hot",
+        "allowBlobPublicAccess": false,
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('appPlanName')]",
+      "location": "[parameters('location')]",
+      "sku": { "name": "B1", "tier": "Basic", "capacity": 1 },
+      "kind": "linux",
+      "properties": { "reserved": true }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('apiAppName')]",
+      "location": "[parameters('location')]",
+      "kind": "app,linux",
+      "identity": { "type": "SystemAssigned" },
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('appPlanName'))]",
+        "httpsOnly": true,
+        "siteConfig": {
+          "linuxFxVersion": "DOTNETCORE|8.0",
+          "alwaysOn": true,
+          "ftpsState": "Disabled",
+          "minTlsVersion": "1.2",
+          "appSettings": [
+            { "name": "ASPNETCORE_ENVIRONMENT", "value": "Production" },
+            { "name": "Jwt__Key", "value": "[format('@Microsoft.KeyVault(SecretUri={0}/JwtKey/)', variables('kvBaseUri'))]" },
+            { "name": "Jwt__Issuer", "value": "PharmPOS" },
+            { "name": "Jwt__Audience", "value": "PharmPOS" },
+            { "name": "Jwt__ExpiryHours", "value": "8" },
+            { "name": "BlobStorage__ConnectionString", "value": "[format('@Microsoft.KeyVault(SecretUri={0}/BlobStorageConnection/)', variables('kvBaseUri'))]" },
+            { "name": "WEBSITE_RUN_FROM_PACKAGE", "value": "1" }
+          ],
+          "connectionStrings": [
+            {
+              "name": "DefaultConnection",
+              "connectionString": "[format('@Microsoft.KeyVault(SecretUri={0}/DefaultConnection/)', variables('kvBaseUri'))]",
+              "type": "SQLAzure"
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', variables('appPlanName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+        "[resourceId('Microsoft.Sql/servers', variables('sqlServerName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('kvName')), resourceId('Microsoft.Web/sites', variables('apiAppName')), variables('kvSecretsUserRoleId'))]",
+      "properties": {
+        "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('kvSecretsUserRoleId'))]",
+        "principalId": "[reference(resourceId('Microsoft.Web/sites', variables('apiAppName')), '2023-01-01', 'full').identity.principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/sites', variables('apiAppName'))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('kvName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Web/staticSites",
+      "apiVersion": "2023-01-01",
+      "name": "[variables('staticWebName')]",
+      "location": "eastus2",
+      "sku": { "name": "Free", "tier": "Free" },
+      "properties": {
+        "stagingEnvironmentPolicy": "Disabled",
+        "allowConfigFileUpdates": true
+      }
+    }
+  ],
+  "outputs": {
+    "apiUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/sites', variables('apiAppName')), '2023-01-01').defaultHostName)]"
+    },
+    "staticWebUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Web/staticSites', variables('staticWebName')), '2023-01-01').defaultHostname)]"
+    },
+    "sqlServerFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Sql/servers', variables('sqlServerName')), '2023-05-01-preview').fullyQualifiedDomainName]"
+    }
+  }
+}
