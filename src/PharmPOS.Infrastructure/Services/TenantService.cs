@@ -125,6 +125,15 @@ public class TenantService(AppDbContext db) : ITenantService
         return ToResponse(tenant, count);
     }
 
+    public async Task DeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        var tenant = await db.Tenants.FindAsync([id], ct)
+            ?? throw new NotFoundException("Tenant", id);
+
+        db.Tenants.Remove(tenant);
+        await db.SaveChangesAsync(ct);
+    }
+
     private static TenantResponse ToResponse(Tenant t, int userCount) => new()
     {
         TenantId         = t.TenantId,

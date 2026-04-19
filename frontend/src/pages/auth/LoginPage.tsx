@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   if (user) {
-    navigate('/pos', { replace: true });
+    navigate(user.role === 'SuperAdmin' ? '/platform/tenants' : '/pos', { replace: true });
     return null;
   }
 
@@ -24,8 +24,8 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(form);
-      navigate('/pos', { replace: true });
+      const res = await login(form);
+      navigate(res.role === 'SuperAdmin' ? '/platform/tenants' : '/pos', { replace: true });
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 423) setError('Account is locked. Please try again later.');

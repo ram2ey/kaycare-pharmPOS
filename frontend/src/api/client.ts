@@ -12,4 +12,15 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
+client.interceptors.response.use(
+  r => r,
+  err => {
+    if (err.response?.status === 401 && !window.location.pathname.includes('/login')) {
+      localStorage.removeItem('pharmos_auth');
+      window.location.href = '/login';
+    }
+    return Promise.reject(err);
+  }
+);
+
 export default client;

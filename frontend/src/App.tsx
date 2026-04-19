@@ -2,9 +2,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import Layout from './components/Layout';
+import SuperAdminLayout from './components/SuperAdminLayout';
 
 import LoginPage from './pages/auth/LoginPage';
 import ChangePasswordPage from './pages/auth/ChangePasswordPage';
+import TenantsPage from './pages/platform/TenantsPage';
 import POSPage from './pages/pos/POSPage';
 import SalesPage from './pages/sales/SalesPage';
 import SaleDetailPage from './pages/sales/SaleDetailPage';
@@ -28,6 +30,14 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/change-password" element={<ChangePasswordPage />} />
 
+          {/* SuperAdmin platform portal */}
+          <Route element={<ProtectedRoute allowedRoles={['SuperAdmin']} />}>
+            <Route element={<SuperAdminLayout />}>
+              <Route path="/platform/tenants" element={<TenantsPage />} />
+            </Route>
+          </Route>
+
+          {/* Pharmacy staff routes */}
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route index element={<Navigate to="/pos" replace />} />

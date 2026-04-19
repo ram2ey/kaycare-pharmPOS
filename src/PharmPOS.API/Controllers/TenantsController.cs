@@ -54,4 +54,11 @@ public class TenantsController(ITenantService tenants) : ControllerBase
         try   { return Ok(await tenants.SetActiveAsync(id, false, ct)); }
         catch (NotFoundException ex) { return NotFound(new { message = ex.Message }); }
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        try   { await tenants.DeleteAsync(id, ct); return NoContent(); }
+        catch (NotFoundException ex) { return NotFound(new { message = ex.Message }); }
+    }
 }
