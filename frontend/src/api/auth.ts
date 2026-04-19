@@ -2,7 +2,9 @@ import client from './client';
 import type { LoginRequest } from '../types';
 
 export async function login(req: LoginRequest) {
-  const res = await client.post('/auth/login', req);
+  const res = await client.post('/auth/login', req, {
+    headers: { 'X-Tenant-Code': req.tenantCode },
+  });
   return res.data as {
     token: string;
     expiresAt: string;
