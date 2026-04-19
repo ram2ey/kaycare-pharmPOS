@@ -7,6 +7,8 @@ import SuperAdminLayout from './components/SuperAdminLayout';
 import LoginPage from './pages/auth/LoginPage';
 import ChangePasswordPage from './pages/auth/ChangePasswordPage';
 import TenantsPage from './pages/platform/TenantsPage';
+import PlatformUsersPage from './pages/platform/PlatformUsersPage';
+import AuditLogsPage from './pages/platform/AuditLogsPage';
 import POSPage from './pages/pos/POSPage';
 import SalesPage from './pages/sales/SalesPage';
 import SaleDetailPage from './pages/sales/SaleDetailPage';
@@ -34,6 +36,8 @@ export default function App() {
           <Route element={<ProtectedRoute allowedRoles={['SuperAdmin']} />}>
             <Route element={<SuperAdminLayout />}>
               <Route path="/platform/tenants" element={<TenantsPage />} />
+              <Route path="/platform/users" element={<PlatformUsersPage />} />
+              <Route path="/platform/audit-logs" element={<AuditLogsPage />} />
             </Route>
           </Route>
 

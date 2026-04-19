@@ -17,6 +17,7 @@ export default function TenantsPage() {
   const [tenants, setTenants] = useState<TenantResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState<null | 'create' | TenantResponse>(null);
+  const [successInfo, setSuccessInfo] = useState<{ tenantName: string; adminEmail: string; tempPassword: string } | null>(null);
   const [createForm, setCreateForm] = useState<CreateTenantRequest>(DEFAULT_CREATE);
   const [editForm, setEditForm] = useState<UpdateTenantRequest>({ tenantName: '', subscriptionPlan: 'Standard', maxUsers: 50, storageQuotaGB: 100 });
   const [saving, setSaving] = useState(false);
@@ -46,7 +47,13 @@ export default function TenantsPage() {
     setSaving(true);
     try {
       await createTenant(createForm);
-      setModal(null); load();
+      setModal(null);
+      setSuccessInfo({
+        tenantName: createForm.tenantName,
+        adminEmail: createForm.adminEmail,
+        tempPassword: `Welcome@${new Date().getFullYear()}!`,
+      });
+      load();
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message;
       setError(msg ?? 'Failed to create tenant.');
@@ -266,6 +273,41 @@ export default function TenantsPage() {
               <button onClick={handleEdit} disabled={saving}
                 className="px-5 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
                 {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success modal after tenant creation */}
+      {successInfo && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-lg w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 text-xl">✓</div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Tenant Created</h2>
+                <p className="text-sm text-gray-500">{successInfo.tenantName}</p>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-4 space-y-3 text-sm">
+              <p className="text-gray-500 text-xs uppercase font-semibold tracking-wide">Admin Login Details</p>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Email</span>
+                <span className="font-medium text-gray-900">{successInfo.adminEmail}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Temporary Password</span>
+                <span className="font-mono font-medium text-gray-900">{successInfo.tempPassword}</span>
+              </div>
+              <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+                Share these credentials with the tenant admin. They must change the password on first login.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setSuccessInfo(null)}
+                className="px-5 py-2 bg-gray-800 hover:bg-gray-900 text-white text-sm font-medium rounded-lg">
+                Done
               </button>
             </div>
           </div>
