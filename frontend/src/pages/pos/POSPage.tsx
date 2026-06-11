@@ -4,6 +4,7 @@ import { getDrugs } from '../../api/drugs';
 import { getCustomers } from '../../api/customers';
 import { createSale } from '../../api/sales';
 import type { CartItem, CustomerResponse, DrugResponse } from '../../types';
+import { getDrugSafety } from '../../api/ai';
 
 const PAYMENT_METHODS = [
   { value: 'Cash',        label: 'Cash' },
@@ -14,6 +15,31 @@ const PAYMENT_METHODS = [
 
 export default function POSPage() {
   const navigate = useNavigate();
+
+  // AI Safety states
+  const [safetyOpen, setSafetyOpen] = useState(false);
+  const [safetyLoading, setSafetyLoading] = useState(false);
+  const [safetyReport, setSafetyReport] = useState('');
+
+  async function handleSafetyCheck() {
+    if (cart.length === 0) return;
+    setSafetyOpen(true);
+    setSafetyLoading(true);
+    try {
+      const drugItems = cart.map(i => ({
+        drugName: i.drugName,
+        genericName: '',
+        dosage: `${i.strength || ''} ${i.dosageForm || ''}`.trim(),
+        quantity: i.quantity,
+      }));
+      const data = await getDrugSafety(drugItems);
+      setSafetyReport(data.interactions);
+    } catch (err) {
+      setSafetyReport('Failed to generate safety report. Please verify drug details.');
+    } finally {
+      setSafetyLoading(false);
+    }
+  }
 
   // Drug search
   const [search, setSearch] = useState('');
@@ -398,6 +424,15 @@ export default function POSPage() {
 
           {error && <p className="text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
+          {cart.length > 0 && (
+            <button
+              onClick={handleSafetyCheck}
+              className="w-full py-2 border border-rose-300 text-rose-700 hover:bg-rose-50 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all mb-2"
+            >
+              <span>✨ AI Pharmacist Guide</span>
+            </button>
+          )}
+
           {/* Charge button */}
           <button
             onClick={handleCheckout}
@@ -441,6 +476,41 @@ export default function POSPage() {
                 style={{ background: '#15803d' }}
               >
                 New Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Safety Checker Modal */}
+      {safetyOpen && (
+        <div className="fixed inset-0 bg-black/45 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] shadow-2xl overflow-hidden flex flex-col animate-scale-up">
+            <div className="bg-rose-600 p-5 text-white flex justify-between items-center">
+              <div>
+                <h3 className="font-extrabold text-base flex items-center gap-2">
+                  <span>✨</span> Pharmacy AI Safety Guide
+                </h3>
+                <p className="text-rose-105 text-xs mt-0.5">Automated screening for drug interactions and patient guidelines.</p>
+              </div>
+              <button onClick={() => setSafetyOpen(false)} className="text-white hover:text-rose-105 text-2xl font-bold cursor-pointer">×</button>
+            </div>
+            <div className="flex-1 p-6 overflow-y-auto prose max-w-none text-sm text-gray-700">
+              {safetyLoading ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-3">
+                  <div className="w-8 h-8 border-4 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-gray-400 font-medium text-xs">Screening for drug interactions and counseling rules...</p>
+                </div>
+              ) : (
+                <div className="whitespace-pre-line leading-relaxed">{safetyReport}</div>
+              )}
+            </div>
+            <div className="bg-gray-50 border-t border-gray-100 p-4 flex justify-end gap-3">
+              <button
+                onClick={() => setSafetyOpen(false)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>
