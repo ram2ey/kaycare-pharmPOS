@@ -33,7 +33,9 @@ export async function getDailySummary(date?: string) {
 }
 
 export function receiptUrl(id: string) {
-  return `${import.meta.env.VITE_API_URL ?? ''}/api/pharmacy/sales/${id}/receipt`;
+  const rawApiUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+  const apiBaseUrl = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
+  return `${apiBaseUrl}/pharmacy/sales/${id}/receipt`;
 }
 
 export async function getSalesReport(params?: { from?: string; to?: string }) {

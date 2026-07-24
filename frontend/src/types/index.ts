@@ -5,6 +5,7 @@ export interface AuthUser {
   email: string;
   fullName: string;
   role: string;
+  permissions?: string[];
   mustChangePassword: boolean;
   tenantType: string;
   tenantCode: string;
@@ -15,6 +16,25 @@ export interface LoginRequest {
   email: string;
   password: string;
 }
+
+export const PERMISSIONS = {
+  POS_CHECKOUT: 'pos:checkout',
+  POS_DISCOUNT: 'pos:discount',
+  POS_VOID: 'pos:void',
+  POS_PARK: 'pos:park',
+  INVENTORY_VIEW: 'inventory:view',
+  INVENTORY_MANAGE: 'inventory:manage',
+  INVENTORY_PRICE: 'inventory:price',
+  CUSTOMERS_VIEW: 'customers:view',
+  CUSTOMERS_MANAGE: 'customers:manage',
+  CS_REGISTER_VIEW: 'csregister:view',
+  CS_REGISTER_AUDIT: 'csregister:audit',
+  PROCUREMENT_MANAGE: 'procurement:manage',
+  REPORTS_VIEW: 'reports:view',
+  REPORTS_EXPORT: 'reports:export',
+  USERS_MANAGE: 'users:manage',
+  SETTINGS_MANAGE: 'settings:manage',
+} as const;
 
 // ── Drug inventory ──────────────────────────────────────────────────────────
 export interface DrugResponse {
@@ -30,6 +50,8 @@ export interface DrugResponse {
   unitCost: number;
   sellingPrice: number;
   isControlledSubstance: boolean;
+  batchNumber?: string;
+  expiryDate?: string;
   isActive: boolean;
 }
 
@@ -40,6 +62,8 @@ export interface CustomerResponse {
   phone?: string;
   email?: string;
   notes?: string;
+  allergies?: string[];
+  chronicConditions?: string[];
   isActive: boolean;
 }
 
@@ -48,6 +72,8 @@ export interface SaveCustomerRequest {
   phone?: string;
   email?: string;
   notes?: string;
+  allergies?: string[];
+  chronicConditions?: string[];
 }
 
 // ── Sale ────────────────────────────────────────────────────────────────────
@@ -62,78 +88,6 @@ export interface SaleItemResponse {
   totalPrice: number;
 }
 
-export interface SaleSummaryResponse {
-  saleId: string;
-  saleNumber: string;
-  customerName: string;
-  paymentMethod: string;
-  totalAmount: number;
-  paidAmount: number;
-  isVoided: boolean;
-  soldByName: string;
-  saleDate: string;
-  itemCount: number;
-}
-
-export interface SaleDetailResponse {
-  saleId: string;
-  saleNumber: string;
-  customerId?: string;
-  customerName: string;
-  paymentMethod: string;
-  totalAmount: number;
-  discountAmount: number;
-  paidAmount: number;
-  change: number;
-  notes?: string;
-  isVoided: boolean;
-  voidReason?: string;
-  soldByName: string;
-  saleDate: string;
-  items: SaleItemResponse[];
-}
-
-export interface CreateSaleItemRequest {
-  drugInventoryId: string;
-  quantity: number;
-}
-
-export interface CreateSaleRequest {
-  customerId?: string;
-  customerName?: string;
-  paymentMethod: string;
-  paidAmount: number;
-  discountAmount: number;
-  notes?: string;
-  items: CreateSaleItemRequest[];
-}
-
-export interface DailySalesSummaryResponse {
-  date: string;
-  totalSales: number;
-  totalRevenue: number;
-  cashRevenue: number;
-  cardRevenue: number;
-  mobileMoneyRevenue: number;
-  insuranceRevenue: number;
-  topDrugs: { drugName: string; totalQuantity: number; totalRevenue: number }[];
-}
-
-export interface SalesReportResponse {
-  from: string;
-  to: string;
-  totalSales: number;
-  voidedSales: number;
-  totalRevenue: number;
-  cashRevenue: number;
-  cardRevenue: number;
-  mobileMoneyRevenue: number;
-  insuranceRevenue: number;
-  dailyBreakdown: DailySalesSummaryResponse[];
-  topDrugs: { drugName: string; totalQuantity: number; totalRevenue: number }[];
-}
-
-// ── Cart (local state only) ─────────────────────────────────────────────────
 export interface CartItem {
   drugInventoryId: string;
   drugName: string;
@@ -142,4 +96,103 @@ export interface CartItem {
   sellingPrice: number;
   currentStock: number;
   quantity: number;
+}
+
+export interface CreateSaleRequest {
+  customerId?: string;
+  customerName?: string;
+  paymentMethod: string;
+  paidAmount: number;
+  discountAmount?: number;
+  notes?: string;
+  items: {
+    drugInventoryId?: string;
+    quantity: number;
+  }[];
+}
+
+export interface SaleSummaryResponse {
+  saleId: string;
+  receiptNumber: string;
+  saleNumber: string;
+  customerName?: string;
+  cashierName: string;
+  createdAt: string;
+  saleDate: string;
+  paymentMethod: string;
+  netAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  itemCount: number;
+  isVoided: boolean;
+}
+
+export interface SaleResponse {
+  saleId: string;
+  receiptNumber: string;
+  saleNumber: string;
+  customerId?: string;
+  customerName?: string;
+  cashierName: string;
+  soldByName: string;
+  createdAt: string;
+  saleDate: string;
+  paymentMethod: string;
+  subtotal: number;
+  discountAmount: number;
+  netAmount: number;
+  totalAmount: number;
+  paidAmount: number;
+  changeAmount: number;
+  change: number;
+  notes?: string;
+  isVoided: boolean;
+  voidReason?: string;
+  items: SaleItemResponse[];
+}
+
+export interface SaleDetailResponse extends SaleResponse {}
+
+export interface DailyTrendItem {
+  date: string;
+  totalRevenue: number;
+  salesCount: number;
+  totalSales: number;
+  cashRevenue: number;
+  cardRevenue: number;
+  mobileMoneyRevenue: number;
+  insuranceRevenue: number;
+}
+
+export interface SalesReportResponse {
+  from: string;
+  to: string;
+  totalRevenue: number;
+  totalSales: number;
+  voidedSales: number;
+  cashRevenue: number;
+  cardRevenue: number;
+  mobileMoneyRevenue: number;
+  insuranceRevenue: number;
+  dailyTrends: DailyTrendItem[];
+  dailyBreakdown: DailyTrendItem[];
+  topDrugs: {
+    drugName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  }[];
+}
+
+export interface DailySalesSummaryResponse {
+  totalSales: number;
+  totalRevenue: number;
+  cashRevenue: number;
+  cardRevenue: number;
+  mobileMoneyRevenue: number;
+  insuranceRevenue: number;
+  topDrugs: {
+    drugName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  }[];
 }

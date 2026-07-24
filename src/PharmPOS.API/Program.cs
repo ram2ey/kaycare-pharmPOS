@@ -14,6 +14,17 @@ builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddControllers();
 
+// JWT Key validation
+var jwtKey = builder.Configuration["Jwt:Key"];
+if (string.IsNullOrEmpty(jwtKey) || jwtKey.StartsWith("REPLACE_WITH"))
+{
+    if (builder.Environment.IsProduction())
+    {
+        throw new InvalidOperationException("Jwt:Key is not securely configured for Production environment.");
+    }
+    jwtKey = "Development_Only_Secret_Key_For_PharmPOS_Min_32_Chars!";
+}
+
 // ── JWT Authentication ────────────────────────────────────────────────────────
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -21,12 +32,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ValidateIssuer   = true,
-            ValidIssuer      = builder.Configuration["Jwt:Issuer"],
+            ValidIssuer      = builder.Configuration["Jwt:Issuer"] ?? "PharmPOS",
             ValidateAudience = true,
-            ValidAudience    = builder.Configuration["Jwt:Audience"],
+            ValidAudience    = builder.Configuration["Jwt:Audience"] ?? "PharmPOS",
             ValidateLifetime = true,
             ClockSkew        = TimeSpan.Zero
         };
@@ -34,18 +44,32 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// ── CORS ──────────────────────────────────────────────────────────────────────
+// ── CORS (Dynamic origin support for Render static apps & local dev) ─────────
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>() ?? [];
+
+var renderExternalUrl = builder.Configuration["RENDER_EXTERNAL_URL"];
 
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.SetIsOriginAllowed(origin =>
+        {
+            if (string.IsNullOrEmpty(origin)) return false;
+
+            var uri = new Uri(origin);
+            if (uri.Host == "localhost" || uri.Host.EndsWith(".onrender.com", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            if (!string.IsNullOrEmpty(renderExternalUrl) && origin.Equals(renderExternalUrl, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            return allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
+        })
+        .AllowAnyHeader()
+        .AllowAnyMethod();
     });
 });
 
@@ -79,6 +103,9 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+// ── Health Check Endpoint for Render Load Balancers ──────────────────────────
+app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
 
 // ── Global exception handler ──────────────────────────────────────────────────
 app.UseExceptionHandler(errApp =>

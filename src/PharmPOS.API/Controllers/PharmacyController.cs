@@ -63,6 +63,17 @@ public class PharmacyController : ControllerBase
         return CreatedAtAction(nameof(GetDrugById), new { id = result.DrugInventoryId }, result);
     }
 
+    /// <summary>Bulk-import drugs from a JSON array (parsed from CSV client-side). Skips duplicates (same Name+Strength+DosageForm).</summary>
+    [HttpPost("drugs/bulk-import")]
+    [Authorize(Roles = $"{Roles.Admin},{Roles.SuperAdmin},{Roles.Pharmacist}")]
+    [ProducesResponseType(200)]
+    public async Task<IActionResult> BulkImportDrugs([FromBody] List<SaveDrugRequest> rows, CancellationToken ct)
+    {
+        if (rows == null || rows.Count == 0) return BadRequest("No rows provided.");
+        var result = await _drugs.BulkImportAsync(rows, ct);
+        return Ok(new { result.Added, result.Skipped });
+    }
+
     /// <summary>Update drug details.</summary>
     [HttpPut("drugs/{id:guid}")]
     [Authorize(Roles = $"{Roles.Admin},{Roles.SuperAdmin},{Roles.Pharmacist}")]

@@ -21,7 +21,7 @@ public class AppDbContextFactory : IDesignTimeDbContextFactory<AppDbContext>
             .Build();
 
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlServer(config.GetConnectionString("DefaultConnection"),
+            .UseNpgsql(config.GetConnectionString("DefaultConnection"),
                 b => b.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName))
             .Options;
 

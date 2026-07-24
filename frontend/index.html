@@ -1,13 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-950 text-slate-100 antialiased">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/logo-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PharmOS — Pharmacy Management</title>
+    <title>KayCare PharmPOS — Next-Gen Pharmacy Platform</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   </head>
-  <body>
-    <div id="root"></div>
+  <body class="h-full font-sans bg-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-white overflow-x-hidden">
+    <div id="root" class="min-h-screen flex flex-col"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>

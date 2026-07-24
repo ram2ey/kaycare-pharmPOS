@@ -120,6 +120,53 @@ public class DrugInventoryService : IDrugInventoryService
             .ToListAsync(ct);
     }
 
+    public async Task<BulkImportResult> BulkImportAsync(IEnumerable<SaveDrugRequest> rows, CancellationToken ct = default)
+    {
+        var added   = 0;
+        var skipped = 0;
+
+        // Load existing drug keys to detect duplicates efficiently
+        var existingKeysList = await _db.DrugInventory
+            .AsNoTracking()
+            .Select(d => d.Name.ToLower() + "|" + (d.Strength ?? "").ToLower() + "|" + (d.DosageForm ?? "").ToLower())
+            .ToListAsync(ct);
+        var existingKeys = existingKeysList.ToHashSet();
+
+        foreach (var row in rows)
+        {
+            if (string.IsNullOrWhiteSpace(row.Name)) { skipped++; continue; }
+
+            var key = row.Name.Trim().ToLower() + "|"
+                    + (row.Strength?.Trim().ToLower() ?? "") + "|"
+                    + (row.DosageForm?.Trim().ToLower() ?? "");
+
+            if (existingKeys.Contains(key)) { skipped++; continue; }
+
+            _db.DrugInventory.Add(new DrugInventory
+            {
+                Name                  = row.Name.Trim(),
+                GenericName           = row.GenericName?.Trim(),
+                DosageForm            = row.DosageForm?.Trim(),
+                Strength              = row.Strength?.Trim(),
+                Unit                  = row.Unit?.Trim() ?? "Tablets",
+                Category              = row.Category?.Trim(),
+                CurrentStock          = 0,
+                ReorderThreshold      = row.ReorderThreshold > 0 ? row.ReorderThreshold : 10,
+                UnitCost              = row.UnitCost,
+                SellingPrice          = row.SellingPrice,
+                IsControlledSubstance = row.IsControlledSubstance,
+                IsActive              = true,
+            });
+
+            existingKeys.Add(key);
+            added++;
+        }
+
+        if (added > 0) await _db.SaveChangesAsync(ct);
+
+        return new BulkImportResult(added, skipped);
+    }
+
     private static DrugInventoryResponse ToResponse(DrugInventory d) => new()
     {
         DrugInventoryId       = d.DrugInventoryId,
@@ -140,3 +187,4 @@ public class DrugInventoryService : IDrugInventoryService
         UpdatedAt             = d.UpdatedAt,
     };
 }
+

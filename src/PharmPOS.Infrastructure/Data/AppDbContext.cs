@@ -33,29 +33,64 @@ public class AppDbContext : DbContext
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
 
-        // Global tenant isolation
-        modelBuilder.Entity<User>()
-            .HasQueryFilter(u => u.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<FacilitySettings>()
-            .HasQueryFilter(f => f.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<DrugInventory>()
-            .HasQueryFilter(d => d.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<StockMovement>()
-            .HasQueryFilter(m => m.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<Supplier>()
-            .HasQueryFilter(s => s.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<PurchaseOrder>()
-            .HasQueryFilter(po => po.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<PurchaseOrderItem>()
-            .HasQueryFilter(i => i.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<Sale>()
-            .HasQueryFilter(s => s.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<SaleItem>()
-            .HasQueryFilter(i => i.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<Customer>()
-            .HasQueryFilter(c => c.TenantId == _tenantContext.TenantId);
-        modelBuilder.Entity<AuditLog>()
-            .HasQueryFilter(a => a.TenantId == _tenantContext.TenantId);
+        // Global tenant isolation filters
+        modelBuilder.Entity<User>().HasQueryFilter(u => u.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<FacilitySettings>().HasQueryFilter(f => f.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<DrugInventory>().HasQueryFilter(d => d.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<StockMovement>().HasQueryFilter(m => m.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<Supplier>().HasQueryFilter(s => s.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<PurchaseOrder>().HasQueryFilter(po => po.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<PurchaseOrderItem>().HasQueryFilter(i => i.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<Sale>().HasQueryFilter(s => s.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<SaleItem>().HasQueryFilter(i => i.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<Customer>().HasQueryFilter(c => c.TenantId == _tenantContext.TenantId);
+        modelBuilder.Entity<AuditLog>().HasQueryFilter(a => a.TenantId == _tenantContext.TenantId);
+
+        // Multi-tenant indexes for query optimization
+        modelBuilder.Entity<User>().HasIndex(u => u.TenantId);
+        modelBuilder.Entity<FacilitySettings>().HasIndex(f => f.TenantId);
+        modelBuilder.Entity<DrugInventory>().HasIndex(d => d.TenantId);
+        modelBuilder.Entity<StockMovement>().HasIndex(m => m.TenantId);
+        modelBuilder.Entity<Supplier>().HasIndex(s => s.TenantId);
+        modelBuilder.Entity<PurchaseOrder>().HasIndex(po => po.TenantId);
+        modelBuilder.Entity<PurchaseOrderItem>().HasIndex(i => i.TenantId);
+        modelBuilder.Entity<Sale>().HasIndex(s => s.TenantId);
+        modelBuilder.Entity<SaleItem>().HasIndex(i => i.TenantId);
+        modelBuilder.Entity<Customer>().HasIndex(c => c.TenantId);
+        modelBuilder.Entity<AuditLog>().HasIndex(a => a.TenantId);
+
+        // PostgreSQL dialect column mapping
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                var defaultSql = property.GetDefaultValueSql();
+                if (defaultSql != null)
+                {
+                    if (defaultSql.Contains("NEWSEQUENTIALID()", StringComparison.OrdinalIgnoreCase))
+                    {
+                        property.SetDefaultValueSql("gen_random_uuid()");
+                    }
+                    else if (defaultSql.Contains("SYSUTCDATETIME()", StringComparison.OrdinalIgnoreCase))
+                    {
+                        property.SetDefaultValueSql("CURRENT_TIMESTAMP");
+                    }
+                }
+
+                var computedSql = property.GetComputedColumnSql();
+                if (computedSql != null)
+                {
+                    var newComputedSql = computedSql.Replace("[", "\"").Replace("]", "\"");
+                    property.SetComputedColumnSql(newComputedSql);
+                }
+
+                var columnType = property.GetColumnType();
+                if (columnType != null && columnType.Contains("nvarchar(max)", StringComparison.OrdinalIgnoreCase))
+                {
+                    property.SetColumnType("text");
+                }
+            }
+        }
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

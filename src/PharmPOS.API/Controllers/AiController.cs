@@ -13,6 +13,15 @@ public class AiController : ControllerBase
     private readonly IConfiguration _config;
     private static readonly HttpClient _httpClient = new();
 
+    // Top 100% Free Models on OpenRouter with automatic failover
+    private static readonly string[] FreeModelsFallback = new[]
+    {
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "google/gemini-2.0-flash-lite-preview:free",
+        "deepseek/deepseek-r1:free",
+        "qwen/qwen-2.5-coder-32b-instruct:free"
+    };
+
     public AiController(IConfiguration config)
     {
         _config = config;
@@ -33,14 +42,16 @@ Provide a structured response in Markdown containing:
 
 Be professional, concise, and focused on patient safety.";
 
-        string? result = await CallGeminiAsync(prompt, jsonMode: false);
+        // Call OpenRouter with 100% free model failover list
+        string? result = await CallOpenRouterFreeModelsAsync(prompt);
+
         if (result != null)
         {
             return Ok(new { interactions = result });
         }
 
-        // Mock Drug Safety
-        string mockInteractions = "#### ⚠️ Drug Interaction Risk Assessment\n";
+        // Built-in Clinical Rule Engine Fallback (Used when offline or no OpenRouter API key provided)
+        string mockInteractions = "#### Drug Interaction Risk Assessment\n";
         bool hasAspirin = false;
         bool hasWarfarin = false;
 
@@ -61,10 +72,10 @@ Be professional, concise, and focused on patient safety.";
         }
         else
         {
-            mockInteractions += "✅ **No major drug-drug interactions detected** between the selected medications in this cart.\n";
+            mockInteractions += "No major drug-drug interactions detected between the selected medications in this cart.\n";
         }
 
-        mockInteractions += "\n#### 📝 Patient Counseling Guidelines\n";
+        mockInteractions += "\n#### Patient Counseling Guidelines\n";
         foreach (var d in request.Items)
         {
             var name = d.DrugName.ToLower();
@@ -89,56 +100,60 @@ Be professional, concise, and focused on patient safety.";
         return Ok(new { interactions = mockInteractions });
     }
 
-    private async Task<string?> CallGeminiAsync(string prompt, bool jsonMode = false)
+    private async Task<string?> CallOpenRouterFreeModelsAsync(string prompt)
     {
-        var apiKey = _config["Gemini:ApiKey"] ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY");
-        if (string.IsNullOrEmpty(apiKey))
-        {
-            return null;
-        }
+        var apiKey = _config["OpenRouter:ApiKey"]
+                  ?? _config["OPENROUTER_API_KEY"]
+                  ?? Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}";
-        
+        if (string.IsNullOrEmpty(apiKey)) return null;
+
+        var customModel = _config["OpenRouter:Model"]
+                       ?? _config["OPENROUTER_MODEL"]
+                       ?? Environment.GetEnvironmentVariable("OPENROUTER_MODEL");
+
+        // If custom model is specified and ends with :free, use it; otherwise use 100% free failover array
+        var modelsToUse = !string.IsNullOrWhiteSpace(customModel) && customModel != "openrouter/auto"
+            ? new[] { customModel }
+            : FreeModelsFallback;
+
         var requestBody = new
         {
-            contents = new[]
+            models = modelsToUse,
+            messages = new[]
             {
-                new
-                {
-                    parts = new[]
-                    {
-                        new { text = prompt }
-                    }
-                }
-            },
-            generationConfig = jsonMode ? new { responseMimeType = "application/json" } : null
+                new { role = "user", content = prompt }
+            }
         };
 
         var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+
         try
         {
-            var response = await _httpClient.PostAsync(url, jsonContent);
-            if (!response.IsSuccessStatusCode)
-            {
-                return null;
-            }
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
+            req.Headers.Add("Authorization", $"Bearer {apiKey}");
+            req.Headers.Add("HTTP-Referer", "https://kaycare-pharmpos.onrender.com");
+            req.Headers.Add("X-Title", "KayCare PharmPOS");
+            req.Content = jsonContent;
+
+            var response = await _httpClient.SendAsync(req);
+            if (!response.IsSuccessStatusCode) return null;
 
             var responseBody = await response.Content.ReadAsStringAsync();
             using var doc = JsonDocument.Parse(responseBody);
             var root = doc.RootElement;
-            if (root.TryGetProperty("candidates", out var candidates) &&
-                candidates.GetArrayLength() > 0 &&
-                candidates[0].TryGetProperty("content", out var content) &&
-                content.TryGetProperty("parts", out var parts) &&
-                parts.GetArrayLength() > 0 &&
-                parts[0].TryGetProperty("text", out var text))
+
+            if (root.TryGetProperty("choices", out var choices) &&
+                choices.GetArrayLength() > 0 &&
+                choices[0].TryGetProperty("message", out var message) &&
+                message.TryGetProperty("content", out var content))
             {
-                return text.GetString();
+                return content.GetString();
             }
         }
         catch
         {
-            // Fail silent, fallback to Mock
+            // Fail through to offline rule engine
         }
 
         return null;

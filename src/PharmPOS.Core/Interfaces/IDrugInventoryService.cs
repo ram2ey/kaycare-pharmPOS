@@ -2,6 +2,8 @@ using PharmPOS.Core.DTOs.Pharmacy;
 
 namespace PharmPOS.Core.Interfaces;
 
+public record BulkImportResult(int Added, int Skipped);
+
 public interface IDrugInventoryService
 {
     Task<List<DrugInventoryResponse>> GetAllAsync(bool? activeOnly, bool? lowStockOnly, string? category, CancellationToken ct = default);
@@ -10,4 +12,5 @@ public interface IDrugInventoryService
     Task<DrugInventoryResponse> UpdateAsync(Guid id, SaveDrugRequest request, CancellationToken ct = default);
     Task<DrugInventoryResponse> DeactivateAsync(Guid id, CancellationToken ct = default);
     Task<List<ReorderAlertResponse>> GetReorderAlertsAsync(CancellationToken ct = default);
+    Task<BulkImportResult> BulkImportAsync(IEnumerable<SaveDrugRequest> rows, CancellationToken ct = default);
 }

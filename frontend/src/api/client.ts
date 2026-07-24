@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const client = axios.create({ baseURL: `${import.meta.env.VITE_API_URL ?? ''}/api` });
+const rawApiUrl = (import.meta.env.VITE_API_URL ?? '').replace(/\/+$/, '');
+const apiBaseUrl = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`;
+
+const client = axios.create({ baseURL: apiBaseUrl });
 
 client.interceptors.request.use((config) => {
   const raw = localStorage.getItem('pharmos_auth');

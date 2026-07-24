@@ -40,3 +40,8 @@ export async function seedCatalog() {
   const res = await client.post('/pharmacy/drugs/seed-catalog');
   return res.data as { added: number };
 }
+
+export async function bulkImportDrugs(rows: object[]) {
+  const res = await client.post('/pharmacy/drugs/bulk-import', rows);
+  return res.data as { Added: number; Skipped: number };
+}

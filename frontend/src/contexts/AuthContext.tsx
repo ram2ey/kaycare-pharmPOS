@@ -7,6 +7,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   login: (req: LoginRequest) => Promise<AuthUser>;
   logout: () => void;
+  hasPermission: (permissionKey: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -34,8 +35,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const hasPermission = useCallback((permissionKey: string): boolean => {
+    if (!user) return false;
+    if (user.role === 'Admin' || user.role === 'SuperAdmin') return true;
+    if (!user.permissions || user.permissions.length === 0) return true; // Default fallback
+    return user.permissions.includes(permissionKey);
+  }, [user]);
+
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, hasPermission }}>
       {children}
     </AuthContext.Provider>
   );

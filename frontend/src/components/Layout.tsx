@@ -29,69 +29,89 @@ export default function Layout() {
   const isAdmin = user?.role === 'Admin' || user?.role === 'SuperAdmin';
 
   const navItems: NavItem[] = [
-    { to: '/pos',             label: 'Point of Sale' },
-    { to: '/sales',           label: 'Sales History' },
-    { to: '/dashboard',       label: 'Dashboard' },
-    { to: '/customers',       label: 'Customers' },
-    { to: '/inventory',       label: 'Drug Inventory' },
-    { to: '/reorder-alerts',  label: 'Reorder Alerts', badge: lowStockCount || undefined },
-    { to: '/suppliers',       label: 'Suppliers',       adminOnly: true },
-    { to: '/purchase-orders', label: 'Purchase Orders', adminOnly: true },
-    { to: '/cs-register',     label: 'CS Register' },
-    { to: '/settings',        label: 'Facility Settings', adminOnly: true },
-    { to: '/users',           label: 'Staff Users',       adminOnly: true },
+    { to: '/pos',            label: 'Point of Sale' },
+    { to: '/dashboard',      label: 'Analytics Dashboard' },
+    { to: '/sales',          label: 'Sales & Receipts' },
+    { to: '/customers',      label: 'Patients & Customers' },
+    { to: '/inventory',      label: 'Drug Inventory' },
+    { to: '/reorder-alerts', label: 'Reorder Alerts', badge: lowStockCount || undefined },
+    { to: '/cs-register',    label: 'CS Controlled Register' },
+    { to: '/suppliers',      label: 'Suppliers', adminOnly: true },
+    { to: '/purchase-orders',label: 'Purchase Orders', adminOnly: true },
+    { to: '/settings',       label: 'Facility Settings', adminOnly: true },
+    { to: '/users',          label: 'Staff Management', adminOnly: true },
   ];
 
   const visibleNav = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      <aside className="w-64 bg-blue-900 text-white flex flex-col">
-        <div className="px-6 py-5 border-b border-blue-800">
-          <h1 className="text-xl font-bold tracking-wide">PharmOS</h1>
-          <p className="text-blue-300 text-sm mt-1">{user?.tenantCode}</p>
+    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+      {/* Sidebar Navigation */}
+      <aside className="w-64 bg-slate-900/90 border-r border-slate-800/80 flex flex-col backdrop-blur-xl z-20">
+        {/* Brand Header */}
+        <div className="px-6 py-5 border-b border-slate-800/80">
+          <h1 className="text-lg font-bold tracking-tight text-slate-100 font-heading">
+            KayCare <span className="text-emerald-400 font-normal">PharmPOS</span>
+          </h1>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider font-mono">
+              {user?.tenantCode || 'Pharmacy Tenant'}
+            </span>
+          </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-4">
+        {/* Navigation Items */}
+        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {visibleNav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex items-center justify-between px-6 py-2.5 text-sm transition-colors ${
+                `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-blue-700 text-white font-medium'
-                    : 'text-blue-200 hover:bg-blue-800 hover:text-white'
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-md shadow-emerald-950/40'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
                 }`
               }
             >
               <span>{item.label}</span>
-              {item.badge && item.badge > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none">
+              {item.badge && item.badge > 0 ? (
+                <span className="bg-rose-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
                   {item.badge}
                 </span>
-              )}
+              ) : null}
             </NavLink>
           ))}
         </nav>
 
-        <div className="px-6 py-4 border-t border-blue-800">
-          <p className="text-sm text-blue-200 truncate">{user?.fullName}</p>
-          <p className="text-xs text-blue-400">{user?.role}</p>
-          <Link to="/change-password"
-            className="mt-2 block text-xs text-blue-300 hover:text-white transition-colors">
-            Change password
-          </Link>
-          <button
-            onClick={handleLogout}
-            className="mt-1 w-full text-left text-xs text-blue-300 hover:text-white transition-colors"
-          >
-            Sign out
-          </button>
+        {/* User Footer */}
+        <div className="p-4 border-t border-slate-800/80 bg-slate-900/40">
+          <div className="flex items-center justify-between">
+            <div className="truncate max-w-[140px]">
+              <p className="text-xs font-semibold text-slate-200 truncate">{user?.fullName}</p>
+              <p className="text-[10px] text-slate-400 font-mono truncate">{user?.role}</p>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <Link
+                to="/change-password"
+                className="text-slate-400 hover:text-slate-100 transition-colors"
+              >
+                Password
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="text-rose-400 hover:text-rose-300 transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">
+      {/* Main Content Viewport */}
+      <main className="flex-1 overflow-y-auto bg-slate-950">
         <Outlet />
       </main>
     </div>

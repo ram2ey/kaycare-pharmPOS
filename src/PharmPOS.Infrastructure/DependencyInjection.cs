@@ -19,9 +19,11 @@ public static class DependencyInjection
         // Per-request tenant context (populated by TenantResolutionMiddleware)
         services.AddScoped<ITenantContext, TenantContext>();
 
+        var connectionString = GetPostgresConnectionString(config);
+
         services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(
-                config.GetConnectionString("DefaultConnection"),
+            options.UseNpgsql(
+                connectionString,
                 b => b.MigrationsAssembly(typeof(AppDbContext).Assembly.FullName)
             )
         );
@@ -44,11 +46,48 @@ public static class DependencyInjection
         services.AddScoped<ISaleReceiptService, SaleReceiptService>();
         services.AddScoped<IAuditService, AuditService>();
 
-        // Azure Blob Storage — singleton client; scoped service
-        services.AddSingleton(_ =>
-            new BlobServiceClient(config["BlobStorage:ConnectionString"]));
-        services.AddSingleton<IBlobStorageService, BlobStorageService>();
+        // Blob Storage — Supabase Storage, Azure Blob Storage, or Null Fallback
+        var supabaseUrl = config["SUPABASE_URL"] ?? config["Supabase:Url"];
+        var supabaseKey = config["SUPABASE_KEY"] ?? config["Supabase:Key"];
+        var blobConn     = config["BlobStorage:ConnectionString"];
+
+        if (!string.IsNullOrWhiteSpace(supabaseUrl) && !string.IsNullOrWhiteSpace(supabaseKey))
+        {
+            services.AddHttpClient<IBlobStorageService, SupabaseStorageService>();
+        }
+        else if (!string.IsNullOrWhiteSpace(blobConn) && blobConn != "UseDevelopmentStorage=true")
+        {
+            services.AddSingleton(_ => new BlobServiceClient(blobConn));
+            services.AddSingleton<IBlobStorageService, BlobStorageService>();
+        }
+        else
+        {
+            services.AddSingleton<IBlobStorageService, NullBlobStorageService>();
+        }
 
         return services;
+    }
+
+    private static string GetPostgresConnectionString(IConfiguration config)
+    {
+        var connStr = config["DATABASE_URL"]
+            ?? config.GetConnectionString("DefaultConnection")
+            ?? "Host=localhost;Database=PharmPOSDb;Username=postgres;Password=postgres";
+
+        if (connStr.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) ||
+            connStr.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+        {
+            var uri = new Uri(connStr);
+            var userInfo = uri.UserInfo.Split(':');
+            var user = userInfo.Length > 0 ? Uri.UnescapeDataString(userInfo[0]) : "";
+            var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+            var host = uri.Host;
+            var port = uri.Port > 0 ? uri.Port : 5432;
+            var database = uri.AbsolutePath.TrimStart('/');
+
+            return $"Host={host};Port={port};Database={database};Username={user};Password={password};SSL Mode=Require;Trust Server Certificate=true;";
+        }
+
+        return connStr;
     }
 }
