@@ -19,7 +19,8 @@ public class TenantResolutionMiddleware
 
     public async Task InvokeAsync(HttpContext context, AppDbContext db, ITenantContext tenantContext)
     {
-        var identifier = ResolveIdentifier(context);
+        var rawIdentifier = ResolveIdentifier(context);
+        var identifier = rawIdentifier?.Trim().ToLowerInvariant();
 
         if (string.IsNullOrEmpty(identifier))
         {
@@ -31,7 +32,7 @@ public class TenantResolutionMiddleware
 
         var tenant = await db.Tenants
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.TenantCode == identifier || t.Subdomain == identifier);
+            .FirstOrDefaultAsync(t => t.TenantCode.ToLower() == identifier || t.Subdomain.ToLower() == identifier);
 
         if (tenant is null || !tenant.IsActive)
         {

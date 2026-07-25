@@ -15,15 +15,15 @@ public static class DbInitializer
             await db.Database.MigrateAsync();
             logger.LogInformation("Database migrations applied successfully.");
 
-            // Check if default tenant exists
-            var existingTenant = await db.Tenants.IgnoreQueryFilters().FirstOrDefaultAsync();
-            if (existingTenant is null)
+            // Check if default 'main' tenant exists
+            var mainTenant = await db.Tenants.IgnoreQueryFilters().FirstOrDefaultAsync(t => t.TenantCode == "main");
+            if (mainTenant is null)
             {
-                logger.LogInformation("No tenant found. Initializing default 'main' tenant and admin account...");
+                logger.LogInformation("Initializing default 'main' tenant...");
                 var mainTenantId = Guid.Parse("11111111-1111-1111-1111-111111111111");
                 var now = DateTime.UtcNow;
 
-                var tenant = new Tenant
+                mainTenant = new Tenant
                 {
                     TenantId = mainTenantId,
                     TenantCode = "main",
@@ -38,24 +38,31 @@ public static class DbInitializer
                     UpdatedAt = now
                 };
 
-                db.Tenants.Add(tenant);
+                db.Tenants.Add(mainTenant);
                 await db.SaveChangesAsync();
+                logger.LogInformation("Default 'main' tenant created successfully.");
+            }
 
+            // Check if default Admin account exists
+            var adminUser = await db.Users.IgnoreQueryFilters().FirstOrDefaultAsync(u => u.Email == "admin@pharmpos.com");
+            if (adminUser is null)
+            {
+                logger.LogInformation("Initializing default Admin account ('admin@pharmpos.com')...");
                 var passHash = BCrypt.Net.BCrypt.HashPassword("PharmPOS@2026!", 12);
                 var adminUserId = Guid.NewGuid();
+                var now = DateTime.UtcNow;
 
-                // Raw SQL insertion to avoid TenantId override from SaveChangesAsync
                 await db.Database.ExecuteSqlInterpolatedAsync($@"
                     INSERT INTO ""Users""
                       (""UserId"", ""TenantId"", ""RoleId"", ""Email"", ""PasswordHash"",
                        ""FirstName"", ""LastName"", ""IsActive"", ""MustChangePassword"",
                        ""FailedLoginCount"", ""CreatedAt"", ""UpdatedAt"")
                     VALUES
-                      ({adminUserId}, {mainTenantId}, {2}, 'admin@pharmpos.com',
+                      ({adminUserId}, {mainTenant.TenantId}, {2}, 'admin@pharmpos.com',
                        {passHash}, 'System', 'Admin',
                        true, false, 0, {now}, {now})");
 
-                logger.LogInformation("Default tenant ('main') and Admin account ('admin@pharmpos.com') created successfully.");
+                logger.LogInformation("Default Admin account ('admin@pharmpos.com') created successfully.");
             }
         }
         catch (Exception ex)

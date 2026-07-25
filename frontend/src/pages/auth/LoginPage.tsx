@@ -27,10 +27,19 @@ export default function LoginPage() {
       const res = await login(form);
       navigate(res.role === 'SuperAdmin' ? '/platform/tenants' : '/pos', { replace: true });
     } catch (err: unknown) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
-      if (status === 423) setError('Account is locked. Please try again later.');
-      else if (status === 401) setError('Invalid credentials.');
-      else setError('Login failed. Please check your details.');
+      const resData = (err as { response?: { status?: number; data?: { error?: string } } })?.response;
+      const status = resData?.status;
+      const serverErrorMsg = resData?.data?.error;
+
+      if (serverErrorMsg) {
+        setError(serverErrorMsg);
+      } else if (status === 423) {
+        setError('Account is locked. Please try again later.');
+      } else if (status === 401) {
+        setError('Invalid email or password.');
+      } else {
+        setError('Login failed. Please check your network connection and details.');
+      }
     } finally {
       setLoading(false);
     }
