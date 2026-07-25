@@ -54,10 +54,13 @@ public class TenantResolutionMiddleware
         if (!string.IsNullOrEmpty(header)) return header;
 
         // Subdomain: mypharmacy.pharmos.com → "mypharmacy"
-        // Ignore Azure default domains (*.azurewebsites.net, *.azurestaticapps.net)
+        // Ignore default hosting platform domains (*.onrender.com, *.azurewebsites.net, *.azurestaticapps.net, localhost)
         var host = context.Request.Host.Host;
         if (host.EndsWith(".azurewebsites.net", StringComparison.OrdinalIgnoreCase) ||
-            host.EndsWith(".azurestaticapps.net", StringComparison.OrdinalIgnoreCase))
+            host.EndsWith(".azurestaticapps.net", StringComparison.OrdinalIgnoreCase) ||
+            host.EndsWith(".onrender.com", StringComparison.OrdinalIgnoreCase) ||
+            host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+            host.StartsWith("127.0.0.1"))
             return null;
 
         var parts = host.Split('.');

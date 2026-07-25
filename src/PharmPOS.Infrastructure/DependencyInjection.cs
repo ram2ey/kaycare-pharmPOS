@@ -78,14 +78,23 @@ public static class DependencyInjection
             connStr.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
         {
             var uri = new Uri(connStr);
-            var userInfo = uri.UserInfo.Split(':');
-            var user = userInfo.Length > 0 ? Uri.UnescapeDataString(userInfo[0]) : "";
-            var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+            var userInfo = uri.UserInfo;
+            var colonIdx = userInfo.IndexOf(':');
+            var user = colonIdx >= 0 ? Uri.UnescapeDataString(userInfo[..colonIdx]) : Uri.UnescapeDataString(userInfo);
+            var password = colonIdx >= 0 ? Uri.UnescapeDataString(userInfo[(colonIdx + 1)..]) : "";
             var host = uri.Host;
             var port = uri.Port > 0 ? uri.Port : 5432;
             var database = uri.AbsolutePath.TrimStart('/');
 
             return $"Host={host};Port={port};Database={database};Username={user};Password={password};SSL Mode=Require;Trust Server Certificate=true;";
+        }
+
+        if (!connStr.Contains("SSL Mode", StringComparison.OrdinalIgnoreCase) &&
+            !connStr.Contains("SslMode", StringComparison.OrdinalIgnoreCase) &&
+            !connStr.Contains("localhost", StringComparison.OrdinalIgnoreCase) &&
+            !connStr.Contains("127.0.0.1"))
+        {
+            connStr = connStr.TrimEnd(';') + ";SSL Mode=Require;Trust Server Certificate=true;";
         }
 
         return connStr;

@@ -28,16 +28,59 @@ public class SupabaseStorageService : IBlobStorageService
             return;
 
         var url = $"{_supabaseUrl}/storage/v1/object/{containerName}/{blobPath}";
+
+        // Save initial stream position if seekable
+        long initialPos = content.CanSeek ? content.Position : 0;
+
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
         request.Headers.Add("Authorization", $"Bearer {_supabaseKey}");
         request.Headers.Add("apikey", _supabaseKey);
         request.Headers.Add("x-upsert", "true");
-
         request.Content = new StreamContent(content);
         request.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
 
         var response = await _httpClient.SendAsync(request, ct);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            // Bucket might not exist — attempt to create bucket and retry
+            await EnsureBucketExistsAsync(containerName, ct);
+
+            if (content.CanSeek) content.Position = initialPos;
+
+            using var retryRequest = new HttpRequestMessage(HttpMethod.Post, url);
+            retryRequest.Headers.Add("Authorization", $"Bearer {_supabaseKey}");
+            retryRequest.Headers.Add("apikey", _supabaseKey);
+            retryRequest.Headers.Add("x-upsert", "true");
+            retryRequest.Content = new StreamContent(content);
+            retryRequest.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+
+            var retryResponse = await _httpClient.SendAsync(retryRequest, ct);
+            retryResponse.EnsureSuccessStatusCode();
+            return;
+        }
+
         response.EnsureSuccessStatusCode();
+    }
+
+    private async Task EnsureBucketExistsAsync(string containerName, CancellationToken ct)
+    {
+        try
+        {
+            var url = $"{_supabaseUrl}/storage/v1/bucket";
+            using var req = new HttpRequestMessage(HttpMethod.Post, url);
+            req.Headers.Add("Authorization", $"Bearer {_supabaseKey}");
+            req.Headers.Add("apikey", _supabaseKey);
+
+            var body = JsonSerializer.Serialize(new { id = containerName, name = containerName, @public = true });
+            req.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+            await _httpClient.SendAsync(req, ct);
+        }
+        catch
+        {
+            // Best effort bucket creation
+        }
     }
 
     public async Task DeleteAsync(string containerName, string blobPath, CancellationToken ct = default)

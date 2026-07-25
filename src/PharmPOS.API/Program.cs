@@ -1,6 +1,7 @@
 using System.Text;
 using PharmPOS.Core.Exceptions;
 using PharmPOS.Infrastructure;
+using PharmPOS.Infrastructure.Data;
 using PharmPOS.Infrastructure.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
@@ -103,6 +104,22 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+// ── Database Auto-Migration & Seeding ────────────────────────────────────────
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        var db = services.GetRequiredService<AppDbContext>();
+        await DbInitializer.InitializeAsync(db, logger);
+    }
+    catch (Exception ex)
+    {
+        logger.LogError(ex, "Failed to initialize or migrate database on application startup.");
+    }
+}
 
 // ── Health Check Endpoint for Render Load Balancers ──────────────────────────
 app.MapGet("/health", () => Results.Ok(new { status = "Healthy", timestamp = DateTime.UtcNow }));
