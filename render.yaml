@@ -16,7 +16,7 @@ services:
           name: pharmpos-db
           property: connectionString
       - key: Jwt__Key
-        generateSecret: true
+        generateValue: true
       - key: Jwt__Issuer
         value: PharmPOS
       - key: Jwt__Audience
@@ -27,7 +27,7 @@ services:
         fromService:
           type: web
           name: pharmpos-web
-          property: url
+          property: host
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
@@ -43,7 +43,6 @@ services:
     env: static
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: ./frontend/dist
-    region: oregon
     routes:
       - type: rewrite
         source: /*
@@ -53,7 +52,7 @@ services:
         fromService:
           type: web
           name: pharmpos-api
-          property: url
+          property: host
 
 databases:
   # ── Managed PostgreSQL Database ─────────────────────────────
