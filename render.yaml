@@ -25,7 +25,7 @@ services:
         value: "8"
       - key: Cors__AllowedOrigins__0
         fromService:
-          type: static
+          type: web
           name: pharmpos-web
           property: url
       - key: OPENROUTER_API_KEY
@@ -38,8 +38,9 @@ services:
         sync: false
 
   # ── Frontend Static Site (React Vite App) ────────────────────
-  - type: static
+  - type: web
     name: pharmpos-web
+    env: static
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: ./frontend/dist
     region: oregon
