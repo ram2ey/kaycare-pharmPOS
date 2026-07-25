@@ -22,10 +22,7 @@ services:
       - key: Jwt__ExpiryHours
         value: "8"
       - key: Cors__AllowedOrigins__0
-        fromService:
-          type: web
-          name: pharmpos-web
-          property: host
+        sync: false
       - key: OPENROUTER_API_KEY
         sync: false
       - key: OPENROUTER_MODEL
@@ -43,7 +40,4 @@ services:
     staticPublishPath: ./frontend/dist
     envVars:
       - key: VITE_API_URL
-        fromService:
-          type: web
-          name: pharmpos-api
-          property: host
+        value: https://pharmpos-api.onrender.com
