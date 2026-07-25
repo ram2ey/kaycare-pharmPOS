@@ -19,6 +19,13 @@ public class TenantResolutionMiddleware
 
     public async Task InvokeAsync(HttpContext context, AppDbContext db, ITenantContext tenantContext)
     {
+        // Bypass tenant resolution for OPTIONS preflight requests and health checks
+        if (HttpMethods.IsOptions(context.Request.Method) || context.Request.Path.StartsWithSegments("/health"))
+        {
+            await _next(context);
+            return;
+        }
+
         var rawIdentifier = ResolveIdentifier(context);
         var identifier = rawIdentifier?.Trim().ToLowerInvariant();
 

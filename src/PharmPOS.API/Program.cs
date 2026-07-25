@@ -45,33 +45,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 
-// ── CORS (Dynamic origin support for Render static apps & local dev) ─────────
-var allowedOrigins = builder.Configuration
-    .GetSection("Cors:AllowedOrigins")
-    .Get<string[]>() ?? [];
-
-var renderExternalUrl = builder.Configuration["RENDER_EXTERNAL_URL"];
-
+// ── CORS (Allow all origins for static frontends & API consumers) ──────────────
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.SetIsOriginAllowed(origin =>
-        {
-            if (string.IsNullOrEmpty(origin)) return false;
-
-            var uri = new Uri(origin);
-            if (uri.Host == "localhost" || uri.Host.EndsWith(".onrender.com", StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            if (!string.IsNullOrEmpty(renderExternalUrl) && origin.Equals(renderExternalUrl, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            return allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
-        })
-        .AllowAnyHeader()
-        .AllowAnyMethod();
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
     });
+});
+
+// ── Forwarded Headers (for Docker / Render reverse proxy behind SSL) ─────────
+builder.Services.Configure<Microsoft.AspNetCore.Builder.ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedFor
+                             | Microsoft.AspNetCore.HttpOverrides.ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 // ── Swagger with Bearer token support ────────────────────────────────────────
@@ -104,6 +95,11 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 var app = builder.Build();
+
+app.UseForwardedHeaders();
+
+// ── CORS MUST be first in pipeline so preflight OPTIONS requests are handled ─
+app.UseCors();
 
 // ── Database Auto-Migration & Seeding ────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
@@ -145,9 +141,6 @@ app.UseExceptionHandler(errApp =>
 
 app.UseSwagger();
 app.UseSwaggerUI();
-
-app.UseHttpsRedirection();
-app.UseCors();
 
 // Tenant must be resolved before authentication so TenantId is in scope
 app.UseMiddleware<TenantResolutionMiddleware>();
