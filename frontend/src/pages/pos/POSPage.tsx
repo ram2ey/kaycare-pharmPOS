@@ -6,7 +6,8 @@ import type { CartItem, CustomerResponse, DrugResponse, SaleResponse } from '../
 import { getDrugSafety } from '../../api/ai';
 import ClinicalSafetyModal from '../../components/ClinicalSafetyModal';
 import ThermalReceipt from '../../components/ThermalReceipt';
-import { queueSale, getPendingSales, clearPendingSale } from '../../lib/offlineStore';
+import { queueSale } from '../../lib/offlineStore';
+import { useBackgroundSync } from '../../hooks/useBackgroundSync';
 
 const PAYMENT_METHODS = [
   { value: 'Cash',        label: 'Cash' },
@@ -26,8 +27,8 @@ interface ParkedSale {
 
 export default function POSPage() {
   // Offline state & sync
-  const [isOffline, setIsOffline] = useState(!navigator.onLine);
-  const [pendingCount, setPendingCount] = useState(0);
+  const { isOnline, pendingCount } = useBackgroundSync();
+  const isOffline = !isOnline;
 
   // AI Safety states
   const [safetyOpen, setSafetyOpen] = useState(false);
@@ -81,46 +82,7 @@ export default function POSPage() {
     } catch {}
   }, [parkedSales]);
 
-  // Online / Offline listener & Auto-Sync
-  useEffect(() => {
-    async function updatePendingCount() {
-      const pending = await getPendingSales();
-      setPendingCount(pending.length);
-    }
-
-    async function syncOfflineSales() {
-      const pending = await getPendingSales();
-      if (pending.length === 0) return;
-      for (const p of pending) {
-        try {
-          await createSale(p.payload as Parameters<typeof createSale>[0]);
-          await clearPendingSale(p.offlineId);
-        } catch {}
-      }
-      const remaining = await getPendingSales();
-      setPendingCount(remaining.length);
-    }
-
-    function handleOnline() {
-      setIsOffline(false);
-      syncOfflineSales();
-    }
-    function handleOffline() {
-      setIsOffline(true);
-      updatePendingCount();
-    }
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    updatePendingCount();
-
-    if (navigator.onLine) syncOfflineSales();
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  // Online / Offline Auto-Sync is now handled globally by useBackgroundSync
 
   // Handle Clinical AI Safety Check
   async function handleSafetyCheck() {

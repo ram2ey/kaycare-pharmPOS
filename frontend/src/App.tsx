@@ -23,8 +23,10 @@ import PurchaseOrderDetailPage from './pages/purchase-orders/PurchaseOrderDetail
 import CSRegisterPage from './pages/cs-register/CSRegisterPage';
 import SettingsPage from './pages/settings/SettingsPage';
 import UsersPage from './pages/users/UsersPage';
+import { useBackgroundSync } from './hooks/useBackgroundSync';
 
 export default function App() {
+  useBackgroundSync();
   return (
     <BrowserRouter>
       <AuthProvider>
