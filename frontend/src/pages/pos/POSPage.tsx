@@ -140,7 +140,6 @@ export default function POSPage() {
     } catch (err: unknown) {
       // Offline fallback: Queue sale locally
       const offlineId = await queueSale(payload);
-      setPendingCount(prev => prev + 1);
 
       const mockOfflineSale: SaleResponse = {
         saleId: offlineId,
