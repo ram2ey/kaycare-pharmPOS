@@ -2,6 +2,10 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using PharmPOS.Core.Entities;
+using PharmPOS.Core.Interfaces;
+using PharmPOS.Infrastructure.Data;
 
 namespace PharmPOS.API.Controllers;
 
@@ -11,9 +15,10 @@ namespace PharmPOS.API.Controllers;
 public class AiController : ControllerBase
 {
     private readonly IConfiguration _config;
+    private readonly AppDbContext _db;
+    private readonly ITenantContext _tenantContext;
     private static readonly HttpClient _httpClient = new();
 
-    // Top 100% Free Models on OpenRouter with automatic failover
     private static readonly string[] FreeModelsFallback = new[]
     {
         "meta-llama/llama-3.3-70b-instruct:free",
@@ -22,14 +27,38 @@ public class AiController : ControllerBase
         "qwen/qwen-2.5-coder-32b-instruct:free"
     };
 
-    public AiController(IConfiguration config)
+    private static readonly string[] ProModelsFallback = new[]
+    {
+        "openai/gpt-4o-mini",
+        "google/gemini-2.0-flash",
+        "meta-llama/llama-3.3-70b-instruct:free"
+    };
+
+    private static readonly string[] FreeVisionModelsFallback = new[]
+    {
+        "google/gemini-2.0-flash-lite-preview:free",
+        "meta-llama/llama-3.2-11b-vision-instruct:free"
+    };
+
+    private static readonly string[] ProVisionModelsFallback = new[]
+    {
+        "openai/gpt-4o-mini",
+        "google/gemini-2.0-flash"
+    };
+
+    public AiController(IConfiguration config, AppDbContext db, ITenantContext tenantContext)
     {
         _config = config;
+        _db = db;
+        _tenantContext = tenantContext;
     }
 
     [HttpPost("drug-safety")]
-    public async Task<IActionResult> DrugSafety([FromBody] DrugSafetyRequest request)
+    public async Task<IActionResult> DrugSafety([FromBody] DrugSafetyRequest request, CancellationToken ct)
     {
+        var (allowed, errorResult, tenant) = await ValidateAiAccessAsync(ct);
+        if (!allowed) return errorResult!;
+
         string drugsJson = JsonSerializer.Serialize(request.Items);
         string prompt = $@"You are a Clinical Pharmacist. Review the following medication cart for potential safety risks, drug-drug interactions, and controlled substance flags.
 Medications:
@@ -42,80 +71,130 @@ Provide a structured response in Markdown containing:
 
 Be professional, concise, and focused on patient safety.";
 
-        // Call OpenRouter with 100% free model failover list
-        string? result = await CallOpenRouterFreeModelsAsync(prompt);
+        string? result = await CallOpenRouterFreeModelsAsync(prompt, tenant);
 
         if (result != null)
         {
+            await TrackAiUsageAsync(tenant, ct);
             return Ok(new { interactions = result });
         }
 
-        // Built-in Clinical Rule Engine Fallback (Used when offline or no OpenRouter API key provided)
-        string mockInteractions = "#### Drug Interaction Risk Assessment\n";
-        bool hasAspirin = false;
-        bool hasWarfarin = false;
-
-        foreach (var d in request.Items)
-        {
-            var name = d.DrugName.ToLower();
-            if (name.Contains("aspirin")) hasAspirin = true;
-            if (name.Contains("warfarin") || name.Contains("clopidogrel") || name.Contains("heparin")) hasWarfarin = true;
-        }
-
-        if (hasAspirin && hasWarfarin)
-        {
-            mockInteractions += "**[CRITICAL RISK] Aspirin + Blood Thinner (Warfarin/Clopidogrel):** Simultaneous use significantly increases the risk of serious GI bleed and hemorrhage. Monitor patient closely for bruising, dark stools, or epistaxis. Consider prescribing a proton pump inhibitor (PPI) for gastric protection.\n";
-        }
-        else if (hasAspirin)
-        {
-            mockInteractions += "**[MODERATE RISK] Aspirin + NSAIDs:** Concomitant use increases risk of gastrointestinal mucosal irritation. Recommend spaced dosing.\n";
-        }
-        else
-        {
-            mockInteractions += "No major drug-drug interactions detected between the selected medications in this cart.\n";
-        }
-
-        mockInteractions += "\n#### Patient Counseling Guidelines\n";
-        foreach (var d in request.Items)
-        {
-            var name = d.DrugName.ToLower();
-            if (name.Contains("amoxicillin") || name.Contains("antibiotic"))
-            {
-                mockInteractions += $"- ***{d.DrugName}***: Instruct patient to complete the entire course, even if symptoms resolve. Can be taken with or without food. Inform pharmacist of severe rash.\n";
-            }
-            else if (name.Contains("metformin"))
-            {
-                mockInteractions += $"- ***{d.DrugName}***: Take with meals to reduce gastrointestinal upset. Avoid excessive alcohol consumption to prevent potential lactic acidosis risk.\n";
-            }
-            else if (name.Contains("aspirin") || name.Contains("ibuprofen"))
-            {
-                mockInteractions += $"- ***{d.DrugName}***: Take with food or milk to protect stomach lining. Report any stomach pain or dark tarry stools immediately.\n";
-            }
-            else
-            {
-                mockInteractions += $"- ***{d.DrugName}***: Administer according to label. Spaced dosing is recommended.\n";
-            }
-        }
-
-        return Ok(new { interactions = mockInteractions });
+        return StatusCode(503, new { message = "AI Assistant is temporarily unavailable.", error = "AI Assistant is temporarily unavailable." });
     }
 
-    private async Task<string?> CallOpenRouterFreeModelsAsync(string prompt)
+    [HttpPost("prescription-ocr")]
+    public async Task<IActionResult> PrescriptionOcr([FromBody] PrescriptionOcrRequest request, CancellationToken ct)
     {
-        var apiKey = _config["OpenRouter:ApiKey"]
+        if (string.IsNullOrWhiteSpace(request.Base64Image))
+        {
+            return BadRequest(new { error = "Image is required." });
+        }
+
+        var (allowed, errorResult, tenant) = await ValidateAiAccessAsync(ct);
+        if (!allowed) return errorResult!;
+
+        string prompt = @"You are a Clinical Pharmacist and Medical Document Parser. Analyze this prescription image or handwritten doctor note.
+Extract all prescribed medications into a JSON array of objects with the following schema:
+- drugName: Name of the medication (brand or generic)
+- dosage: Strength/dosage (e.g. 500mg, 10ml)
+- frequency: How often to take (e.g. Once daily, Twice daily, Every 8 hours)
+- duration: Duration of treatment (e.g. 7 days, 1 month)
+- quantity: Estimated numeric quantity to dispense (integer)
+- instructions: Special instructions (e.g. Take after meals)
+
+Return ONLY a raw JSON array matching this schema without any markdown backticks or explanation text.";
+
+        string? result = await CallOpenRouterMultimodalAsync(prompt, request.Base64Image, request.MimeType ?? "image/jpeg", tenant);
+
+        if (result != null)
+        {
+            try
+            {
+                var cleaned = result.Trim();
+                if (cleaned.StartsWith("```"))
+                {
+                    cleaned = cleaned.Substring(cleaned.IndexOf('\n')).Trim();
+                    if (cleaned.EndsWith("```"))
+                        cleaned = cleaned.Substring(0, cleaned.Length - 3).Trim();
+                }
+                using var doc = JsonDocument.Parse(cleaned);
+                await TrackAiUsageAsync(tenant, ct);
+                return Content(cleaned, "application/json");
+            }
+            catch
+            {
+                // Fall through
+            }
+        }
+
+        return StatusCode(503, new { message = "AI Assistant is temporarily unavailable.", error = "AI Assistant is temporarily unavailable." });
+    }
+
+    private async Task<(bool Allowed, IActionResult? ErrorResult, Tenant? Tenant)> ValidateAiAccessAsync(CancellationToken ct)
+    {
+        var tenantId = _tenantContext.TenantId;
+        if (tenantId == Guid.Empty) return (true, null, null);
+
+        var tenant = await _db.Tenants.FirstOrDefaultAsync(t => t.TenantId == tenantId, ct);
+        if (tenant == null) return (true, null, null);
+
+        // 1. Lock Check
+        if (!tenant.IsAiEnabled)
+        {
+            return (false, StatusCode(403, new { error = "AI Assistant features are disabled / opted-out for this facility. Contact your administrator to enable AI." }), tenant);
+        }
+
+        // 2. Monthly Quota Check
+        if (tenant.AiRequestsThisMonth >= tenant.AiMonthlyQuota)
+        {
+            return (false, StatusCode(429, new { error = $"Monthly AI Assistant quota ({tenant.AiMonthlyQuota} requests) reached for this facility. Please contact your administrator to upgrade your plan." }), tenant);
+        }
+
+        return (true, null, tenant);
+    }
+
+    private async Task TrackAiUsageAsync(Tenant? tenant, CancellationToken ct)
+    {
+        if (tenant == null) return;
+        try
+        {
+            tenant.AiRequestsThisMonth += 1;
+            await _db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            // Non-blocking usage update
+        }
+    }
+
+    private async Task<string?> CallOpenRouterFreeModelsAsync(string prompt, Tenant? tenant)
+    {
+        var apiKey = !string.IsNullOrWhiteSpace(tenant?.CustomOpenRouterKey)
+            ? tenant.CustomOpenRouterKey
+            : (_config["OpenRouter:ApiKey"]
                   ?? _config["OPENROUTER_API_KEY"]
-                  ?? Environment.GetEnvironmentVariable("OPENROUTER_API_KEY");
+                  ?? Environment.GetEnvironmentVariable("OPENROUTER_API_KEY")
+                  ?? _config["Gemini:ApiKey"]
+                  ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY"));
 
         if (string.IsNullOrEmpty(apiKey)) return null;
+
+        string[] modelsToUse;
+        var tier = tenant?.AllowedAiTiers ?? tenant?.SubscriptionPlan ?? "Standard";
+
+        if (tier.Equals("Enterprise", StringComparison.OrdinalIgnoreCase) || tier.Equals("Pro", StringComparison.OrdinalIgnoreCase))
+            modelsToUse = ProModelsFallback;
+        else
+            modelsToUse = FreeModelsFallback;
 
         var customModel = _config["OpenRouter:Model"]
                        ?? _config["OPENROUTER_MODEL"]
                        ?? Environment.GetEnvironmentVariable("OPENROUTER_MODEL");
 
-        // If custom model is specified and ends with :free, use it; otherwise use 100% free failover array
-        var modelsToUse = !string.IsNullOrWhiteSpace(customModel) && customModel != "openrouter/auto"
-            ? new[] { customModel }
-            : FreeModelsFallback;
+        if (!string.IsNullOrWhiteSpace(customModel) && customModel != "openrouter/auto")
+        {
+            modelsToUse = new[] { customModel };
+        }
 
         var requestBody = new
         {
@@ -153,7 +232,92 @@ Be professional, concise, and focused on patient safety.";
         }
         catch
         {
-            // Fail through to offline rule engine
+            // Fail silent
+        }
+
+        return null;
+    }
+
+    private async Task<string?> CallOpenRouterMultimodalAsync(string prompt, string base64Data, string mimeType, Tenant? tenant)
+    {
+        var apiKey = !string.IsNullOrWhiteSpace(tenant?.CustomOpenRouterKey)
+            ? tenant.CustomOpenRouterKey
+            : (_config["OpenRouter:ApiKey"]
+                  ?? _config["OPENROUTER_API_KEY"]
+                  ?? Environment.GetEnvironmentVariable("OPENROUTER_API_KEY")
+                  ?? _config["Gemini:ApiKey"]
+                  ?? Environment.GetEnvironmentVariable("GEMINI_API_KEY"));
+
+        if (string.IsNullOrEmpty(apiKey)) return null;
+
+        var imageUrl = base64Data.StartsWith("data:") ? base64Data : $"data:{mimeType};base64,{base64Data}";
+
+        string[] modelsToUse;
+        var tier = tenant?.AllowedAiTiers ?? tenant?.SubscriptionPlan ?? "Standard";
+
+        if (tier.Equals("Enterprise", StringComparison.OrdinalIgnoreCase) || tier.Equals("Pro", StringComparison.OrdinalIgnoreCase))
+            modelsToUse = ProVisionModelsFallback;
+        else
+            modelsToUse = FreeVisionModelsFallback;
+
+        var customModel = _config["OpenRouter:Model"]
+                       ?? _config["OPENROUTER_MODEL"]
+                       ?? Environment.GetEnvironmentVariable("OPENROUTER_MODEL");
+
+        if (!string.IsNullOrWhiteSpace(customModel) && customModel != "openrouter/auto")
+        {
+            modelsToUse = new[] { customModel };
+        }
+
+        var requestBody = new
+        {
+            models = modelsToUse,
+            messages = new[]
+            {
+                new
+                {
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "text", text = prompt },
+                        new
+                        {
+                            type = "image_url",
+                            image_url = new { url = imageUrl }
+                        }
+                    }
+                }
+            }
+        };
+
+        var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
+            req.Headers.Add("Authorization", $"Bearer {apiKey}");
+            req.Headers.Add("HTTP-Referer", "https://kaycare-pharmpos.onrender.com");
+            req.Headers.Add("X-Title", "KayCare PharmPOS");
+            req.Content = jsonContent;
+
+            var response = await _httpClient.SendAsync(req);
+            if (!response.IsSuccessStatusCode) return null;
+
+            var responseBody = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(responseBody);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("choices", out var choices) &&
+                choices.GetArrayLength() > 0 &&
+                choices[0].TryGetProperty("message", out var message) &&
+                message.TryGetProperty("content", out var content))
+            {
+                return content.GetString();
+            }
+        }
+        catch
+        {
+            // Fail silent
         }
 
         return null;
@@ -171,4 +335,10 @@ public class DrugSafetyItem
     public string GenericName { get; set; } = string.Empty;
     public string Dosage { get; set; } = string.Empty;
     public int Quantity { get; set; }
+}
+
+public class PrescriptionOcrRequest
+{
+    public string Base64Image { get; set; } = string.Empty;
+    public string? MimeType { get; set; }
 }

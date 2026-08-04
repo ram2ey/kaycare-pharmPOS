@@ -49,20 +49,25 @@ public class TenantService(AppDbContext db) : ITenantService
 
         var tenant = new Tenant
         {
-            TenantId         = tenantId,
-            TenantCode       = code,
-            TenantName       = req.TenantName.Trim(),
-            Subdomain        = code,
-            TenantType       = req.TenantType,
-            SubscriptionPlan = req.SubscriptionPlan,
-            IsActive         = true,
-            MaxUsers         = req.MaxUsers,
-            StorageQuotaGB   = req.StorageQuotaGB,
-            CreatedAt        = now,
-            UpdatedAt        = now,
+            TenantId             = tenantId,
+            TenantCode           = code,
+            TenantName           = req.TenantName.Trim(),
+            Subdomain            = code,
+            TenantType           = req.TenantType,
+            SubscriptionPlan     = req.SubscriptionPlan,
+            IsActive             = true,
+            MaxUsers             = req.MaxUsers,
+            StorageQuotaGB       = req.StorageQuotaGB,
+            IsAiEnabled          = req.IsAiEnabled,
+            AiMonthlyQuota       = req.AiMonthlyQuota,
+            AiRequestsThisMonth  = 0,
+            AiQuotaResetDate     = now,
+            AllowedAiTiers       = req.AllowedAiTiers,
+            CustomOpenRouterKey = req.CustomOpenRouterKey,
+            CreatedAt            = now,
+            UpdatedAt            = now,
         };
 
-        // Temporary password — admin must change on first login
         var tempPassword = $"Welcome@{DateTime.UtcNow.Year}!";
         var hash         = BCrypt.Net.BCrypt.HashPassword(tempPassword, 12);
 
@@ -79,8 +84,6 @@ public class TenantService(AppDbContext db) : ITenantService
         db.Tenants.Add(tenant);
         await db.SaveChangesAsync(ct);
 
-        // Insert admin user via raw SQL — SaveChangesAsync auto-injects TenantId from TenantContext
-        // which would overwrite the new tenant's TenantId with the calling SuperAdmin's tenant.
         await db.Database.ExecuteSqlInterpolatedAsync($@"
             INSERT INTO Users
               (UserId, TenantId, RoleId, Email, PasswordHash,
@@ -99,12 +102,16 @@ public class TenantService(AppDbContext db) : ITenantService
         var tenant = await db.Tenants.FindAsync([id], ct)
             ?? throw new NotFoundException("Tenant", id);
 
-        tenant.TenantName       = req.TenantName.Trim();
-        tenant.TenantType       = req.TenantType;
-        tenant.SubscriptionPlan = req.SubscriptionPlan;
-        tenant.MaxUsers         = req.MaxUsers;
-        tenant.StorageQuotaGB   = req.StorageQuotaGB;
-        tenant.UpdatedAt        = DateTime.UtcNow;
+        tenant.TenantName           = req.TenantName.Trim();
+        tenant.TenantType           = req.TenantType;
+        tenant.SubscriptionPlan     = req.SubscriptionPlan;
+        tenant.MaxUsers             = req.MaxUsers;
+        tenant.StorageQuotaGB       = req.StorageQuotaGB;
+        tenant.IsAiEnabled          = req.IsAiEnabled;
+        tenant.AiMonthlyQuota       = req.AiMonthlyQuota;
+        tenant.AllowedAiTiers       = req.AllowedAiTiers;
+        tenant.CustomOpenRouterKey = req.CustomOpenRouterKey;
+        tenant.UpdatedAt            = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
 
@@ -136,16 +143,21 @@ public class TenantService(AppDbContext db) : ITenantService
 
     private static TenantResponse ToResponse(Tenant t, int userCount) => new()
     {
-        TenantId         = t.TenantId,
-        TenantCode       = t.TenantCode,
-        TenantName       = t.TenantName,
-        Subdomain        = t.Subdomain,
-        TenantType       = t.TenantType,
-        SubscriptionPlan = t.SubscriptionPlan,
-        IsActive         = t.IsActive,
-        MaxUsers         = t.MaxUsers,
-        StorageQuotaGB   = t.StorageQuotaGB,
-        UserCount        = userCount,
-        CreatedAt        = t.CreatedAt,
+        TenantId             = t.TenantId,
+        TenantCode           = t.TenantCode,
+        TenantName           = t.TenantName,
+        Subdomain            = t.Subdomain,
+        TenantType           = t.TenantType,
+        SubscriptionPlan     = t.SubscriptionPlan,
+        IsActive             = t.IsActive,
+        MaxUsers             = t.MaxUsers,
+        StorageQuotaGB       = t.StorageQuotaGB,
+        UserCount            = userCount,
+        IsAiEnabled          = t.IsAiEnabled,
+        AiMonthlyQuota       = t.AiMonthlyQuota,
+        AiRequestsThisMonth  = t.AiRequestsThisMonth,
+        AllowedAiTiers       = t.AllowedAiTiers,
+        CustomOpenRouterKey = t.CustomOpenRouterKey,
+        CreatedAt            = t.CreatedAt,
     };
 }
